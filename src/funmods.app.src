@@ -1,0 +1,12 @@
+{application, funmods,
+ [
+  {description, "Functional Programming Facilities"},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { funmods_app, []}},
+  {env, []}
+ ]}.
