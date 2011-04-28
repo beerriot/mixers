@@ -16,42 +16,34 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
+-define(ITER(Stop, Next),
+        case Gin() of
+            stop           -> Stop;
+            {Val, NextGin} -> Next
+        end).
+
 -type gin() :: gin_t(term()).
 -type gin_t(Type) :: fun(() -> stop | {Type, gin_t(Type)}).
 
 -spec fold(fun((term(), term()) -> term()), term(), gin()) -> term().
 fold(Fun, Init, Gin) ->
-    case Gin() of
-        stop ->
-            Init;
-        {Val, NextGin} ->
-            fold(Fun, Fun(Val, Init), NextGin)
-    end.
+    ?ITER(Init, fold(Fun, Fun(Val, Init), NextGin)).
 
 -spec map(fun((term()) -> term()), gin()) -> gin().
 map(Fun, Gin) ->
-    fun() ->
-            case Gin() of
-                stop ->
-                    stop;
-                {Val, NextGin} ->
-                    {Fun(Val), map(Fun, NextGin)}
-            end
-    end.
+    fun() -> ?ITER(stop, {Fun(Val), map(Fun, NextGin)}) end.
 
 -spec filter(fun((term()) -> boolean()), gin()) -> gin().
 filter(Fun, Gin) ->
     fun() ->
-            case Gin() of
-                stop ->
-                    stop;
-                {Val, NextGin} ->
-                    NextFilterGin = filter(Fun, NextGin),
-                    case Fun(Val) of
-                        true -> {Val, NextFilterGin};
-                        false -> (NextFilterGin)()
-                    end
-            end
+            ?ITER(stop,
+                  begin
+                      NextFilterGin = filter(Fun, NextGin),
+                      case Fun(Val) of
+                          true -> {Val, NextFilterGin};
+                          false -> (NextFilterGin)()
+                      end
+                  end)
     end.
 
 -spec sum(gin_t(number())) -> number().
