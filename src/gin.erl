@@ -1,3 +1,30 @@
+%% @doc Function-based generators.
+%%
+%%      Sometimes building a list simply to have something to iterate
+%%      along is annoying, wasteful, or impossible.  For those
+%%      situations, consider `gin'.
+%%
+%%      A gin is a function of zero arity.  When evaluated, it
+%%      produces the "next" item, and a new gin (as a 2-tuple `{Item,
+%%      Gin}').  When the gin has nothing more to produce, the result
+%%      of its evaluation should be the atom `stop'.
+%%
+%%      The {@link seq/2} function provides a nice example.  Calling
+%%      it with the arguments 1 and 3 produces a gin that will
+%%      evaluate to 1, 2, and 3, before stopping:
+%% ```
+%% First       = gin:seq(1, 3).    % create a new gin
+%% {1, Second} = gin:next(First).  % get the first value
+%% {2, Third}  = gin:next(Second). % get the second value
+%% {3, Fourth} = gin:next(Third).  % get the third value
+%% stop        = gin:next(Fourth).
+%% '''
+%%
+%%      Remember that gins are functions, so they can do anything:
+%%      compute pure values, receive messages, print output, receive
+%%      input, etc.  The functions in this module have no side effects
+%%      themselves, so it's up to the caller to determine whether they
+%%      stay that way.
 -module(gin).
 
 -export([

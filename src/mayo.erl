@@ -1,3 +1,23 @@
+%% @doc Recursion help for anonymous functions and alternate control.
+%%
+%%      When you're stuck at the Erlang console, wishing you could
+%%      write a recursive anonymous function to debug some data
+%%      structure, or you need a different kind of control than
+%%      {@link lists} offers, load `mayo'.
+%%
+%%      For instance, you may want to sum mailbox messages until some
+%%      signal:
+%% ```
+%% sum_until(Marker) ->
+%%    mayo:loop(
+%%       fun(Sum) ->
+%%          receive
+%%             Marker -> {stop, Sum};
+%%             Number -> {continue, Number+Sum}
+%%          end
+%%       end,
+%%       0).
+%% '''
 -module(mayo).
 
 -export([

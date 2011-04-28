@@ -1,4 +1,6 @@
 *~
 ebin/
 .eunit/
+doc/*
+!doc/overview.edoc
 

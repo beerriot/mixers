@@ -1,0 +1,10 @@
+@doc Mixers is a collection of useful utilities for functional
+programming.
+
+The {@link gin} module implements function-based "generators" to
+facitate iteration without, for example, first having to build a list
+for use with lists:fold, :map, etc.
+
+The {@link mayo} module implements "do", "while", and "loop" functions
+to make it easier to analyze structures recursively using anonymous
+functions (as is often the case in the Erlang console).
