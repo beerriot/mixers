@@ -1,4 +1,4 @@
--module(tonic).
+-module(mayo).
 
 -export([
          while/3,
