@@ -1,4 +1,4 @@
--module(funmods_app).
+-module(mixers_app).
 
 -behaviour(application).
 
@@ -10,7 +10,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    funmods_sup:start_link().
+    mixers_sup:start_link().
 
 stop(_State) ->
     ok.

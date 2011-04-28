@@ -1,4 +1,4 @@
-{application, funmods,
+{application, mixers,
  [
   {description, "Functional Programming Facilities"},
   {vsn, "1"},
@@ -7,6 +7,6 @@
                   kernel,
                   stdlib
                  ]},
-  {mod, { funmods_app, []}},
+  {mod, { mixers_app, []}},
   {env, []}
  ]}.

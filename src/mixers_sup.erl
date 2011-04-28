@@ -1,5 +1,5 @@
 
--module(funmods_sup).
+-module(mixers_sup).
 
 -behaviour(supervisor).
 
