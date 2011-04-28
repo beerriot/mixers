@@ -6,6 +6,7 @@
          fold/3,
          map/2,
          filter/2,
+         foreach/2,
          seq/2,
          seq/3,
          sum/1,
@@ -45,6 +46,10 @@ filter(Fun, Gin) ->
                       end
                   end)
     end.
+
+-spec foreach(fun((term()) -> term()), gin()) -> ok.
+foreach(Fun, Gin) ->
+    ?ITER(ok, begin Fun(Val), foreach(Fun, NextGin) end).
 
 -spec sum(gin_t(number())) -> number().
 sum(Gin) ->
@@ -112,5 +117,21 @@ next_test() ->
     {First, Next} = next(Gen),
     ?assertEqual(hi, First),
     ?assertEqual(stop, next(Next)).
+
+foreach_test() ->
+    Key = '$foreach_test_val',
+    Fun = fun(Val) ->
+                  put(Key, [Val|get(Key)])
+          end,
+
+    put(Key, []),
+    ok = lists:foreach(Fun, lists:seq(1, 10)),
+    Lists = get(Key),
+    
+    put(Key, []),
+    ok = foreach(Fun, seq(1, 10)),
+    Gin = get(Key),
+    
+    ?assertEqual(Lists, Gin).
 
 -endif.
