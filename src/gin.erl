@@ -28,21 +28,31 @@ fold(Fun, Init, Gin) ->
             fold(Fun, Fun(Val, Init), NextGin)
     end.
 
--spec map(fun((term()) -> term()), gin()) -> [term()].
+-spec map(fun((term()) -> term()), gin()) -> gin().
 map(Fun, Gin) ->
-    Rev = fold(fun(Val, Acc) -> [Fun(Val)|Acc] end, [], Gin),
-    lists:reverse(Rev).
+    fun() ->
+            case Gin() of
+                stop ->
+                    stop;
+                {Val, NextGin} ->
+                    {Fun(Val), map(Fun, NextGin)}
+            end
+    end.
 
--spec filter(fun((term()) -> boolean()), gin()) -> [term()].
+-spec filter(fun((term()) -> boolean()), gin()) -> gin().
 filter(Fun, Gin) ->
-    Filter = fun(Val, Acc) ->
-                     case Fun(Val) of
-                         true  -> [Val|Acc];
-                         false -> Acc
-                     end
-             end,
-    Rev = fold(Filter, [], Gin),
-    lists:reverse(Rev).
+    fun() ->
+            case Gin() of
+                stop ->
+                    stop;
+                {Val, NextGin} ->
+                    NextFilterGin = filter(Fun, NextGin),
+                    case Fun(Val) of
+                        true -> {Val, NextFilterGin};
+                        false -> (NextFilterGin)()
+                    end
+            end
+    end.
 
 -spec sum(gin_t(number())) -> number().
 sum(Gin) ->
@@ -56,7 +66,8 @@ from_list([]) ->
 
 -spec to_list(gin()) -> list().
 to_list(Gin) ->
-    map(fun(X) -> X end, Gin).
+    Rev = fold(fun(Val, Acc) -> [Val|Acc] end, [], Gin),
+    lists:reverse(Rev).
 
 -spec seq(number(), number()) -> gin_t(number()).
 seq(Start, Finish) when Start =< Finish ->
@@ -92,7 +103,7 @@ sum_test() ->
 map_test() ->
     Fun = fun(X) -> X * 2 end,
     ?assertEqual([ Fun(N) || N <- lists:seq(1, 10) ],
-                 map(Fun, seq(1, 10))).
+                 to_list(map(Fun, seq(1, 10)))).
 
 fold_test() ->
     Fun = fun(X, Acc) -> X * Acc end,
@@ -102,7 +113,7 @@ fold_test() ->
 filter_test() ->
     Fun = fun(X) -> (X rem 2) =:= 0 end,
     ?assertEqual(lists:filter(Fun, lists:seq(1, 10)),
-                 filter(Fun, seq(1, 10))).
+                 to_list(filter(Fun, seq(1, 10)))).
 
 next_test() ->
     Gen = fun() -> {hi, fun() -> stop end} end,
