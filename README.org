@@ -1,0 +1,11 @@
+Mixers is a collection of useful utilities for functional programming.
+
+The [[file:src/gin.erl][gin]] module implements function-based "generators" to
+facilitate iteration without, for example, first having to build a list
+for use with lists:fold, :map, etc.
+
+The [[file:src/mayo.erl][mayo]] module implements "do", "while", and "loop" functions
+to make it easier to analyze structures recursively using anonymous
+functions (as is often the case in the Erlang console).
+
+Mixers is provided under the Apache License, Version 2.0 (see [[file:LICENSE][LICENSE]]).
