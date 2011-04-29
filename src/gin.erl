@@ -45,6 +45,10 @@
 %%      input, etc.  The functions in this module have no side effects
 %%      themselves, so it's up to the caller to determine whether they
 %%      stay that way.
+%%
+%%      SICP readers will recognize this construction as "streams"
+%%      (a.k.a "delayed lists" or "lazy lists") from section 3.5.
+%% [http://mitpress.mit.edu/sicp/full-text/book/book-Z-H-24.html#%_sec_3.5]
 -module(gin).
 
 -export([
