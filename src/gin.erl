@@ -209,10 +209,13 @@ seq(Start, Finish) when Start > Finish ->
 %% [1,-9,-19,-29,-39] = gin:to_list(gin:seq(1, -42, -10)).
 %% '''
 -spec seq(number(), number(), number()) -> gin_t(number()).
-seq(Start, Finish, Incr) when (Incr > 0 andalso Start =< Finish);
+seq(Start, Finish, Incr) ->
+    %% Start must always be returned
+    fun() -> {Start, seq2(Start+Incr, Finish, Incr)} end.
+seq2(Start, Finish, Incr) when (Incr > 0 andalso Start =< Finish);
                               (Incr < 0 andalso Start >= Finish) ->
-    fun() -> {Start, seq(Start+Incr, Finish, Incr)} end;
-seq(_Start, _Finish, _Incr) ->
+    fun() -> {Start, seq2(Start+Incr, Finish, Incr)} end;
+seq2(_Start, _Finish, _Incr) ->
     fun() -> stop end.
 
 %% @doc Get the next value to be produced by a gin, and a handle to
