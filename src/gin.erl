@@ -65,6 +65,9 @@
         ]).
 
 -ifdef(TEST).
+-ifdef(EQC).
+-include_lib("eqc/include/eqc.hrl").
+-endif.
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
@@ -282,4 +285,171 @@ foreach_test() ->
     
     ?assertEqual(Lists, Gin).
 
--endif.
+-ifdef(EQC).
+
+eqc_test_() ->
+    [{Name, ?_assert(eqc:quickcheck(Prop))}
+     || {Name, Prop} <- [{"list roundtrip", eqc_list_prop()},
+                         {"gin:seq vs lists:seq", eqc_seq_lists_prop()},
+                         {"general seq", eqc_seq_prop()},
+                         {"seq sum", eqc_sum_prop()},
+                         {"map", eqc_map_prop()},
+                         {"fold", eqc_fold_prop()},
+                         {"filter", eqc_filter_prop()},
+                         {"foreach", eqc_foreach_prop()},
+                         {"next", eqc_next_prop()}
+                        ]].
+
+eqc_list_prop() ->
+    ?FORALL(List,
+            list(real()),
+            begin
+                equals(List, to_list(from_list(List)))
+            end
+           ).
+
+eqc_seq_lists_prop() ->
+    ?FORALL({Start, Extent, Step},
+            {int(), nat(), ?SUCHTHAT(Step, nat(), Step =/= 0)},
+            begin
+                conjunction(
+                  [{"forward", equals(lists:seq(Start, Start+Extent),
+                                      to_list(seq(Start, Start+Extent)))},
+                   {"backward", equals(lists:seq(Start+Extent, Start, -1),
+                                       to_list(seq(Start+Extent, Start)))},
+                   {"forward with step",
+                    equals(lists:seq(Start, Start+Extent, Step),
+                           to_list(seq(Start, Start+Extent, Step)))},
+                   {"backward with step",
+                    equals(lists:seq(Start+Extent, Start, -Step),
+                           to_list(seq(Start+Extent, Start, -Step)))}])
+            end).
+
+eqc_seq_prop() ->
+    ?FORALL({Start, End, Step},
+            {real(), real(), ?SUCHTHAT(Step, real(), Step =/= 0.0)},
+            begin
+                RealStep = if (Start =< End andalso Step > 0);
+                              (Start >= End andalso Step < 0) ->
+                                   Step;
+                              true ->
+                                   -Step
+                           end,
+                Gin = seq(Start, End, RealStep),
+                {First, Rest} = next(Gin),
+                {Final, FailedSteps} =
+                    fold(fun(Val, {Prev, Fails}) ->
+                                 {Val,
+                                  case RealStep-(Val-Prev) of
+                                      S when S < 1.0e-9, S > -1.0e-9 ->
+                                          Fails;
+                                      _LargeDiff ->
+                                          [{Prev, Val}|Fails]
+                                  end}
+                         end,
+                         {First, []},
+                         Rest),
+                conjunction(
+                  [{"head", equals(Start, First)},
+                   {"lasttail", (RealStep > 0 andalso Final =< End)
+                    orelse (RealStep < 0 andalso Final >= End)},
+                   {"intervals", equals([], FailedSteps)}])
+            end).
+
+eqc_sum_prop() ->
+    ?FORALL({Start, Extent},
+            {nat(), nat()},
+            begin
+                End = Start+Extent,
+                StartToExtent = if Extent == 0 ->
+                                        Start;
+                                   true ->
+                                       (End*(End+1)/2)
+                                            - ((Start-1)*(Start)/2)
+                                end,
+                equals(StartToExtent,
+                       sum(seq(Start, End)))
+            end).
+
+eqc_map_prop() ->
+    ?FORALL(List,
+            list(real()),
+            begin
+                Map = fun(X) -> X * 2 end,
+                equals([ Map(I) || I <- List ],
+                       to_list(map(Map, from_list(List))))
+            end).
+
+eqc_fold_prop() ->
+    ?FORALL(List,
+            list(real()),
+            begin
+                Fold = fun(X, Acc) -> X * Acc end,
+                equals(lists:foldl(Fold, 1, List),
+                       fold(Fold, 1, from_list(List)))
+            end).
+
+eqc_filter_prop() ->
+    ?FORALL(List,
+            list(int()),
+            begin
+                Filter = fun(X) -> (X rem 2) =:= 0 end,
+                equals([ I || I <- List, Filter(I) ],
+                       to_list(filter(Filter, from_list(List))))
+            end).
+
+eqc_foreach_prop() ->
+    ?FORALL(List,
+            list(real()),
+            begin
+                ListsKey = '$foreach_test_eqc_lists_val',
+                GinKey = '$foreach_test_eqc_gin_val',
+                Fun = fun(Key) ->
+                              fun(Val) ->
+                                      put(Key, [Val|get(Key)])
+                              end
+                      end,
+
+                put(ListsKey, []),
+                ok = lists:foreach(Fun(ListsKey), List),
+                %% ListsKey holds reverse of List
+    
+                put(GinKey, []),
+                ok = foreach(Fun(GinKey),
+                             eqc_foreach_key_popper(ListsKey)),
+                %% GinKey now holds List
+    
+                equals(List, get(GinKey))
+            end).
+
+eqc_foreach_key_popper(FromKey) ->
+    fun() ->
+            case get(FromKey) of
+                [Head|Tail] ->
+                    put(FromKey, Tail),
+                    {Head, eqc_foreach_key_popper(FromKey)};
+                [] -> stop
+            end
+    end.
+
+eqc_next_prop() ->
+    ?FORALL(List,
+            list(int()),
+            begin
+                Gin = from_list(List),
+                case List of
+                    [] ->
+                        equals(stop, next(Gin));
+                    _ ->
+                        {Head, Rest} = next(Gin),
+                        conjunction(
+                          [{"head", equals(hd(List), Head)},
+                           {"fun", is_function(Rest)},
+                           {"arity", 0 == proplists:get_value(
+                                            arity, erlang:fun_info(Rest))}])
+                end
+            end).
+
+-endif. % EQC
+
+-endif. % TEST
