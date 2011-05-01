@@ -49,6 +49,9 @@
 %%      SICP readers will recognize this construction as "streams"
 %%      (a.k.a "delayed lists" or "lazy lists") from section 3.5.
 %% [http://mitpress.mit.edu/sicp/full-text/book/book-Z-H-24.html#%_sec_3.5]
+%%
+%%      Source code may be viewed at
+%%      [http://github.com/beerriot/mixers/blob/master/src/gin.erl]
 -module(gin).
 
 -export([

@@ -8,3 +8,6 @@ for use with lists:fold, :map, etc.
 The {@link mayo} module implements "do", "while", and "loop" functions
 to make it easier to analyze structures recursively using anonymous
 functions (as is often the case in the Erlang console).
+
+Source for the mixers application is maintained at
+[http://github.com/beerriot/mixers].

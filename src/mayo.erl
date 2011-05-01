@@ -38,6 +38,9 @@
 %%       end,
 %%       0).
 %% '''
+%%
+%%      Source code may be viewed at
+%%      [http://github.com/beerriot/mixers/blob/master/src/mayo.erl]
 -module(mayo).
 
 -export([
