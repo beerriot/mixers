@@ -1,0 +1,190 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<title>Module gin</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module gin</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>Function-based generators.
+
+
+<h2><a name="description">Description</a></h2><p>Function-based generators.</p>
+ 
+       <p>Sometimes building a list simply to have something to iterate
+       along is annoying, wasteful, or impossible.  For those
+       situations, consider <code>gin</code>.</p>
+ 
+       <p>A gin is a function of zero arity.  When evaluated, it
+       produces the "next" item, and a new gin (as a 2-tuple <code>{Item,
+       Gin}</code>).  When the gin has nothing more to produce, the result
+       of its evaluation should be the atom <code>stop</code>.</p>
+ 
+       The <a href="#seq-2"><code>seq/2</code></a> function provides a nice example.  Calling
+       it with the arguments 1 and 3 produces a gin that will
+       evaluate to 1, 2, and 3, before stopping:
+  <pre>  First       = gin:seq(1, 3).    % create a new gin
+  {1, Second} = gin:next(First).  % get the first value
+  {2, Third}  = gin:next(Second). % get the second value
+  {3, Fourth} = gin:next(Third).  % get the third value
+  stop        = gin:next(Fourth).</pre>
+ 
+       <p>Remember that gins are functions, so they can do anything:       
+compute pure values, receive messages, print output, receive       
+input, etc.  The functions in this module have no side effects       
+themselves, so it's up to the caller to determine whether they       
+stay that way.</p>
+ 
+       SICP readers will recognize this construction as "streams"
+       (a.k.a "delayed lists" or "lazy lists") from section 3.5.
+  <a href="http://mitpress.mit.edu/sicp/full-text/book/book-Z-H-24.html#%_sec_3.5" target="_top"><tt>http://mitpress.mit.edu/sicp/full-text/book/book-Z-H-24.html#%_sec_3.5</tt></a>
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-gin">gin()</a></h3>
+<p><tt>gin() = <a href="#type-gin_t">gin_t</a>(term())</tt></p>
+
+
+<h3 class="typedecl"><a name="type-gin_t">gin_t()</a></h3>
+<p><tt>gin_t(Type) = fun(() -&gt; stop | {Type, <a href="#type-gin_t">gin_t</a>(Type)})</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#filter-2">filter/2</a></td><td>Filter a gin, producing a new gin that only produces those
+       items for with <code>Fun(Item)</code> returns <code>true</code>.</td></tr>
+<tr><td valign="top"><a href="#fold-3">fold/3</a></td><td>Fold over a gin, accumulating a result.</td></tr>
+<tr><td valign="top"><a href="#foreach-2">foreach/2</a></td><td>Evaluate <code>Fun</code> for each item produced by <code>Gin</code>.</td></tr>
+<tr><td valign="top"><a href="#from_list-1">from_list/1</a></td><td>Create a gin that produces the items from a list, in order.</td></tr>
+<tr><td valign="top"><a href="#map-2">map/2</a></td><td>Map over a gin, producing a new gin with each item being the
+       result of the application <code>Fun(Item)</code>.</td></tr>
+<tr><td valign="top"><a href="#next-1">next/1</a></td><td>Get the next value to be produced by a gin, and a handle to
+       the next invocation of that gin.</td></tr>
+<tr><td valign="top"><a href="#seq-2">seq/2</a></td><td>Create a gin that produces the numbers from <code>Start</code> to
+       <code>Finish</code>, incrementing by 1 each time if <code>Start</code> is less than
+       or equal to <code>Finish</code>, or decrementing by 1 each time if
+       <code>Start</code> is less that <code>Finish</code>.</td></tr>
+<tr><td valign="top"><a href="#seq-3">seq/3</a></td><td>Create a gin that produces a sequence of numbers, starting
+       with <code>Start</code>, and incrementing by <code>Incr</code>, and finishing before
+       producing any number past <code>Finish</code> (where "past" means "less
+       than" if <code>Incr</code> is negative, or "greater than" if <code>Incr</code> is
+       positive).</td></tr>
+<tr><td valign="top"><a href="#sum-1">sum/1</a></td><td>Sum the items produced by a gin.</td></tr>
+<tr><td valign="top"><a href="#to_list-1">to_list/1</a></td><td>Create a list containing the items produced by a gin, in order.</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="filter-2">filter/2</a></h3>
+<div class="spec">
+<p><tt>filter(Fun::fun((term()) -&gt; boolean()), Gin::<a href="#type-gin">gin()</a>) -&gt; <a href="#type-gin">gin()</a></tt><br></p>
+</div><p><p>Filter a gin, producing a new gin that only produces those
+       items for with <code>Fun(Item)</code> returns <code>true</code>.  The input gin is       
+not evaluated until something evaluates the output gin.</p>
+ 
+       For example, "evens" might be implemented as:
+  <pre>  evens(Gin) -&gt;
+      filter(fun(X) -&gt; (X rem 2) =:= 0 end, Gin).</pre>
+       See <a href="#map-2"><code>map/2</code></a> for an example of the delayed-evaluation
+       behavior.</p>
+
+<h3 class="function"><a name="fold-3">fold/3</a></h3>
+<div class="spec">
+<p><tt>fold(Fun::fun((Val::term(), Acc::term()) -&gt; NewAcc::term()), Init::term(), Gin::<a href="#type-gin">gin()</a>) -&gt; term()</tt><br></p>
+</div><p><p>Fold over a gin, accumulating a result.  <code>Fun</code> is called once
+       for each item the gin produces, as <code>Fun(Item, Accumulator)</code>.
+       <code>Init</code> is passed as the accumulator for the first call.</p>
+ 
+       For example, "sum" might be defined as:
+  <pre>  sum(Gin) -&gt;
+      fold(fun erlang:'+'/2, 0, Gin).</pre></p>
+
+<h3 class="function"><a name="foreach-2">foreach/2</a></h3>
+<div class="spec">
+<p><tt>foreach(Fun::fun((term()) -&gt; term()), Gin::<a href="#type-gin">gin()</a>) -&gt; ok</tt><br></p>
+</div><p><p>Evaluate <code>Fun</code> for each item produced by <code>Gin</code>.</p>
+ 
+       For example, sending each item in a gin as a message to
+       another process might be implemented as:
+  <pre>  carrier(Pid, Gin) -&gt;
+     foreach(fun(Item) -&gt; Pid ! Item end, Gin).</pre></p>
+
+<h3 class="function"><a name="from_list-1">from_list/1</a></h3>
+<div class="spec">
+<p><tt>from_list(Rest::list()) -&gt; <a href="#type-gin">gin()</a></tt><br></p>
+</div><p><p>Create a gin that produces the items from a list, in order.</p>
+ 
+       The similarities can be seen in this snippet:
+  <pre>  [Head|RestList] = List.
+  {Head,RestGin}  = next(from_list(List)).
+  stop            = next(from_list([])).</pre></p>
+
+<h3 class="function"><a name="map-2">map/2</a></h3>
+<div class="spec">
+<p><tt>map(Fun::fun((term()) -&gt; term()), Gin::<a href="#type-gin">gin()</a>) -&gt; <a href="#type-gin">gin()</a></tt><br></p>
+</div><p><p>Map over a gin, producing a new gin with each item being the
+       result of the application <code>Fun(Item)</code>.  The input gin is not       
+evaluated until something evaluates the output gin.</p>
+ 
+       For example, "double" might be implemented as:
+  <pre>  double(Gin) -&gt;
+     map(fun(I) -&gt; io:format("x"), I*2 end, Gin).</pre>
+       But its side-effect behavior would be:
+  <pre>  1&gt; Single = gin:seq(1,3).
+  #Fun&lt;gin.5.58311043&gt;
+  2&gt; Double = double(Single).
+  #Fun&lt;gin.0.51198227&gt;
+  3&gt; gin:to_list(Double).
+  xxx[2,4,6]</pre>
+       (Note that the "x" characters printed by the map function did
+       not appear until the output gin was evaluated by
+       <a href="#to_list-1"><code>to_list/1</code></a>.)</p>
+
+<h3 class="function"><a name="next-1">next/1</a></h3>
+<div class="spec">
+<p><tt>next(Gin::<a href="#type-gin">gin()</a>) -&gt; stop | {term(), <a href="#type-gin">gin()</a>}</tt><br></p>
+</div><p>Get the next value to be produced by a gin, and a handle to
+       the next invocation of that gin.  The atom <code>stop</code> is returned
+       instead, if the gin had nothing more to produce.  See the example
+       use with <a href="#from_list-1"><code>from_list/1</code></a>.</p>
+
+<h3 class="function"><a name="seq-2">seq/2</a></h3>
+<div class="spec">
+<p><tt>seq(Start::number(), Finish::number()) -&gt; <a href="#type-gin_t">gin_t</a>(number())</tt><br></p>
+</div><p>Create a gin that produces the numbers from <code>Start</code> to
+       <code>Finish</code>, incrementing by 1 each time if <code>Start</code> is less than
+       or equal to <code>Finish</code>, or decrementing by 1 each time if
+       <code>Start</code> is less that <code>Finish</code>.
+  <pre>  [1,2,3,4,5] = gin:to_list(gin:seq(1, 5)).
+  [5,4,3,2,1] = gin:to_list(gin:seq(5, 1)).</pre></p>
+
+<h3 class="function"><a name="seq-3">seq/3</a></h3>
+<div class="spec">
+<p><tt>seq(Start::number(), Finish::number(), Incr::number()) -&gt; <a href="#type-gin_t">gin_t</a>(number())</tt><br></p>
+</div><p>Create a gin that produces a sequence of numbers, starting
+       with <code>Start</code>, and incrementing by <code>Incr</code>, and finishing before
+       producing any number past <code>Finish</code> (where "past" means "less
+       than" if <code>Incr</code> is negative, or "greater than" if <code>Incr</code> is
+       positive).
+  <pre>  [1,11,21,31,41] = gin:to_list(gin:seq(1, 42, 10)).
+  [1,-9,-19,-29,-39] = gin:to_list(gin:seq(1, -42, -10)).</pre></p>
+
+<h3 class="function"><a name="sum-1">sum/1</a></h3>
+<div class="spec">
+<p><tt>sum(Gin::<a href="#type-gin_t">gin_t</a>(number())) -&gt; number()</tt><br></p>
+</div><p>Sum the items produced by a gin. This function assumes that
+       the gin produces only numbers.
+  <pre>  500000500000 = gin:sum(gin:seq(1, 1000000)).</pre></p>
+
+<h3 class="function"><a name="to_list-1">to_list/1</a></h3>
+<div class="spec">
+<p><tt>to_list(Gin::<a href="#type-gin">gin()</a>) -&gt; list()</tt><br></p>
+</div><p>Create a list containing the items produced by a gin, in order.
+       <pre>          List = to_list(from_list(List))</pre></p>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc, May 1 2011, 09:59:15.</i></p>
+</body>
+</html>
