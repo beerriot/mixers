@@ -64,7 +64,9 @@
          seq/2,
          seq/3,
          sum/1,
-         next/1
+         next/1,
+         zip/2,
+         zip/1
         ]).
 
 -ifdef(TEST).
@@ -229,6 +231,48 @@ seq2(_Start, _Finish, _Incr) ->
 next(Gin) ->
     Gin().
 
+%% @equiv zip([Gin1, Gin2])
+-spec zip(gin(), gin()) -> gin_t({term(), term()}).
+zip(Gin1, Gin2) ->
+    zip([Gin1, Gin2]).
+
+%% @doc Zip N gins together into a new gin. Evaluating the new gin
+%%      will produce a tuple containing one evaluation of each
+%%      component gin.
+%% ```
+%% Gin1 = gin:from_list([a,b,c]).
+%% Gin2 = gin:from_list([1,2,3]).
+%% Gin3 = gin:from_list(["x","y","z"]).
+%% GinC = gin:zip([Gin1, Gin2, Gin3]).
+%% { {a,1,"x"}, GinCC } = GinC().
+%% { {b,2,"y"}, GinCCC} = GinCC().
+%% { {c,3,"z"}, GinCCCC} = GinCCC().
+%% stop = GinCCCC().
+%% '''
+-spec zip([gin()]) -> gin_t(tuple()).
+zip([Head|Tail]) ->
+    fun() ->
+            Start = case Head() of
+                        {Val, Next} -> {[Val], [Next]};
+                        stop        -> stop
+                    end,
+            case lists:foldl(fun zipfold/2, Start, Tail) of
+                stop ->
+                    stop;
+                {RevVals, RevNexts} ->
+                    {list_to_tuple(lists:reverse(RevVals)),
+                     zip(lists:reverse(RevNexts))}
+            end
+    end.
+
+-spec zipfold(gin(), {[term()], [gin()]}) -> {[term()], [gin()]};
+             (gin(), stop) -> stop.
+zipfold(Gin, {AccVal, AccNext}) ->
+    {Val, Next} = Gin(),
+    {[Val|AccVal], [Next|AccNext]};
+zipfold(Gin, stop) ->
+    stop = Gin().
+
 %%%
 
 -ifdef(TEST).
@@ -265,6 +309,11 @@ filter_test() ->
     Fun = fun(X) -> (X rem 2) =:= 0 end,
     ?assertEqual(lists:filter(Fun, lists:seq(1, 10)),
                  to_list(filter(Fun, seq(1, 10)))).
+
+%% zip/2 should operate like lists:zip/2
+zip_test() ->
+    ?assertEqual(lists:zip(lists:seq(1, 10), lists:seq(11, 20)),
+                 to_list(zip(seq(1, 10), seq(11, 20)))).
 
 %% make sure next gives the next item and handle, and then stops
 next_test() ->
@@ -303,6 +352,7 @@ eqc_test_() ->
                          {"fold", eqc_fold_prop()},
                          {"filter", eqc_filter_prop()},
                          {"foreach", eqc_foreach_prop()},
+                         {"zip", eqc_zip_prop()},
                          {"next", eqc_next_prop()}
                         ]].
 
@@ -437,6 +487,25 @@ eqc_foreach_key_popper(FromKey) ->
                 [] -> stop
             end
     end.
+
+eqc_zip_prop() ->
+    ?FORALL({ExtraLists, ListLength},
+            {nat(), nat()},
+            begin
+                Lists = eqc_zip_make_lists(2+ExtraLists, ListLength),
+                ZippedGin = zip([ from_list(L) || L <- Lists ]),
+                ZippedList = eqc_zip_lists(Lists),
+                equals(ZippedList, to_list(ZippedGin))
+            end).
+
+eqc_zip_make_lists(Count, Length) ->
+    [ [ N*I || N <- lists:seq(1, Length) ]
+      || I <- lists:seq(1, Count) ].
+
+eqc_zip_lists([[]|_]) -> [];
+eqc_zip_lists(Lists) ->
+    {Heads, Tails} = lists:unzip([ {H, T} || [H|T] <- Lists ]),
+    [ list_to_tuple(Heads) | eqc_zip_lists(Tails) ].
 
 eqc_next_prop() ->
     ?FORALL(List,
