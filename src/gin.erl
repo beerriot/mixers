@@ -66,7 +66,9 @@
          sum/1,
          next/1,
          zip/2,
-         zip/1
+         zip/1,
+         zipwitha/2,
+         zipwithl/2
         ]).
 
 -ifdef(TEST).
@@ -236,21 +238,53 @@ next(Gin) ->
 zip(Gin1, Gin2) ->
     zip([Gin1, Gin2]).
 
+%% @equiv zipwithl(fun erlang:list_to_tuple/1, Gins)
+-spec zip([gin()]) -> gin_t(tuple()).
+zip(Gins) ->
+    zipwithl(fun erlang:list_to_tuple/1, Gins).
+
 %% @doc Zip N gins together into a new gin. Evaluating the new gin
-%%      will produce a tuple containing one evaluation of each
-%%      component gin.
+%%      will evaluate the `Combine' function on a list containing one
+%%      evaluation of each component gin, and produce that result.
 %% ```
 %% Gin1 = gin:from_list([a,b,c]).
 %% Gin2 = gin:from_list([1,2,3]).
 %% Gin3 = gin:from_list(["x","y","z"]).
-%% GinC = gin:zip([Gin1, Gin2, Gin3]).
+%% GinC = gin:zipwithl(fun erlang:list_to_tuple/1, [Gin1, Gin2, Gin3]).
 %% { {a,1,"x"}, GinCC } = GinC().
 %% { {b,2,"y"}, GinCCC} = GinCC().
 %% { {c,3,"z"}, GinCCCC} = GinCCC().
 %% stop = GinCCCC().
 %% '''
--spec zip([gin()]) -> gin_t(tuple()).
-zip([Head|Tail]) ->
+-spec zipwithl(fun(([term()]) -> term()), [gin()]) -> gin_t(tuple()).
+zipwithl(Fun, Gins) ->
+    zipwith(Fun, Gins, list).
+
+%% @doc Zip N gins together into a new gin. Evaluating the new gin
+%%      will apply the `Combine' function to the first evaluation of
+%%      each component gin, and produce that result.
+%% ```
+%% Gin1 = gin:from_list([a,b,c]).
+%% Gin2 = gin:from_list([1,2,3]).
+%% Gin3 = gin:from_list(["x","y","z"]).
+%% GinC = gin:zipwitha(fun(P,Q,R) -> {P, Q, R} end, [Gin1, Gin2, Gin3]).
+%% { {a,1,"x"}, GinCC } = GinC().
+%% { {b,2,"y"}, GinCCC} = GinCC().
+%% { {c,3,"z"}, GinCCCC} = GinCCC().
+%% stop = GinCCCC().
+%% '''
+-spec zipwitha(fun(), [gin()]) -> gin_t(tuple()).
+zipwitha(Fun, Gins) ->
+    zipwith(Fun, Gins, apply).
+
+%% @doc Internal implementation of {@link zipwithl/2} and {@link
+%%      zipwitha/2}.  `Combine' will be evaluated as
+%%      `Combine(GinValues)' if `Eval' is the atom `list', or as
+%%      `apply(Combine, GinValues)' if `Eval' is the atom `apply'
+%%      (where `GinValues' is a list of the results of the first
+%%      evaluation of each gin.
+-spec zipwith(fun(), Gins::[gin()], list | apply) -> gin_t(tuple()).
+zipwith(Combine, [Head|Tail], Eval) ->
     fun() ->
             Start = case Head() of
                         {Val, Next} -> {[Val], [Next]};
@@ -260,8 +294,13 @@ zip([Head|Tail]) ->
                 stop ->
                     stop;
                 {RevVals, RevNexts} ->
-                    {list_to_tuple(lists:reverse(RevVals)),
-                     zip(lists:reverse(RevNexts))}
+                    {case Eval of
+                         list ->
+                             Combine(lists:reverse(RevVals));
+                         apply ->
+                             apply(Combine, lists:reverse(RevVals))
+                     end,
+                     zipwith(Combine, lists:reverse(RevNexts), Eval)}
             end
     end.
 
@@ -353,6 +392,7 @@ eqc_test_() ->
                          {"filter", eqc_filter_prop()},
                          {"foreach", eqc_foreach_prop()},
                          {"zip", eqc_zip_prop()},
+                         {"zipwitha", eqc_zipwitha_prop()},
                          {"next", eqc_next_prop()}
                         ]].
 
@@ -498,9 +538,32 @@ eqc_zip_prop() ->
                 equals(ZippedList, to_list(ZippedGin))
             end).
 
+eqc_zipwitha_prop() ->
+    ?FORALL({ExtraLists, ListLength},
+            {?SUCHTHAT(X, nat(), X < 10), %% functions have an argument limit
+             nat()},
+            begin
+                Lists = eqc_zip_make_lists(2+ExtraLists, ListLength),
+                Fun = eqc_zip_make_apply_fun(2+ExtraLists),
+                ZippedGin = zipwitha(Fun, [ from_list(L) || L <- Lists ]),
+                ZippedList = eqc_zip_lists(Lists),
+                equals(ZippedList, to_list(ZippedGin))
+            end).
+
 eqc_zip_make_lists(Count, Length) ->
     [ [ N*I || N <- lists:seq(1, Length) ]
       || I <- lists:seq(1, Count) ].
+
+eqc_zip_make_apply_fun(N) ->
+    Args = string:join(
+             [ [$_|integer_to_list(A)] || A <- lists:seq(1, N) ],
+             ","),
+    FunStr = lists:flatten(["fun(", Args, ") -> {", Args, "} end."]),
+    %% stolen from riak_kv_mapred_json
+    {ok, Tokens, _} = erl_scan:string(FunStr),
+    {ok, [Form]} = erl_parse:parse_exprs(Tokens),
+    {value, Fun, _} = erl_eval:expr(Form, erl_eval:new_bindings()),
+    Fun.
 
 eqc_zip_lists([[]|_]) -> [];
 eqc_zip_lists(Lists) ->
