@@ -72,9 +72,23 @@
         ]).
 
 -ifdef(TEST).
+
 -ifdef(EQC).
--include_lib("eqc/include/eqc.hrl").
+  -include_lib("eqc/include/eqc.hrl").
+  -define(EP, eqc).
+-else.
+-ifdef(PROPER).
+   %% this module can't use proper's default imports, because state
+   %% proper_statem:zip/2 conflicts with the local zip/2
+  -define(PROPER_NO_IMPORTS, true).
+  -include_lib("proper/include/proper.hrl").
+   %% eqc-compatible functions are useful to have imported, though
+  -import(proper, [conjunction/1, equals/2]).
+  -import(proper_types, [list/1, int/0, nat/0, real/0]).
+  -define(EP, proper).
 -endif.
+-endif.
+
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
@@ -379,10 +393,10 @@ foreach_test() ->
     
     ?assertEqual(Lists, Gin).
 
--ifdef(EQC).
+-ifdef(EP).
 
 eqc_test_() ->
-    [{Name, ?_assert(eqc:quickcheck(Prop))}
+    [{Name, ?_assert(?EP:quickcheck(Prop))}
      || {Name, Prop} <- [{"list roundtrip", eqc_list_prop()},
                          {"gin:seq vs lists:seq", eqc_seq_lists_prop()},
                          {"general seq", eqc_seq_prop()},
@@ -460,8 +474,8 @@ eqc_sum_prop() ->
                 StartToExtent = if Extent == 0 ->
                                         Start;
                                    true ->
-                                       (End*(End+1)/2)
-                                            - ((Start-1)*(Start)/2)
+                                       (End*(End+1) div 2)
+                                            - ((Start-1)*(Start) div 2)
                                 end,
                 equals(StartToExtent,
                        sum(seq(Start, End)))
@@ -588,6 +602,6 @@ eqc_next_prop() ->
                 end
             end).
 
--endif. % EQC
+-endif. % EP
 
 -endif. % TEST
