@@ -347,6 +347,7 @@ eqc_test_() ->
                          {"next", eqc_next_prop()}
                         ]].
 
+%% roundtripping from_list/to_list should produce its input
 eqc_list_prop() ->
     ?FORALL(List,
             list(real()),
@@ -355,6 +356,9 @@ eqc_list_prop() ->
             end
            ).
 
+%% gin:seq/2,3 should work just like list:seq/2,3 for integers
+%% (with the exception that lists:seq/2 won't work if Start
+%% is greater than end)
 eqc_seq_lists_prop() ->
     ?FORALL({Start, Extent, Step},
             {int(), nat(), ?SUCHTHAT(Step, nat(), Step =/= 0)},
@@ -372,21 +376,33 @@ eqc_seq_lists_prop() ->
                            to_list(seq(Start+Extent, Start, -Step)))}])
             end).
 
+%% seq should also work for floating point numbers
 eqc_seq_prop() ->
     ?FORALL({Start, End, Step},
             {real(), real(), ?SUCHTHAT(Step, real(), Step =/= 0.0)},
             begin
+                %% get Step going in the right direction
                 RealStep = if (Start =< End andalso Step > 0);
                               (Start >= End andalso Step < 0) ->
                                    Step;
                               true ->
                                    -Step
                            end,
+
+                %% make the gin
                 Gin = seq(Start, End, RealStep),
+
+                %% look through the gin
                 {First, Rest} = next(Gin),
                 {Final, FailedSteps} =
                     fold(fun(Val, {Prev, Fails}) ->
                                  {Val,
+                                  %% this test and seq/3 generate
+                                  %% their values in different ways,
+                                  %% which can produce floating point
+                                  %% values that are not exactly
+                                  %% equal, but are logically equal
+                                  %% for the purposes of seq
                                   case RealStep-(Val-Prev) of
                                       S when S < 1.0e-9, S > -1.0e-9 ->
                                           Fails;
@@ -396,6 +412,7 @@ eqc_seq_prop() ->
                          end,
                          {First, []},
                          Rest),
+
                 conjunction(
                   [{"head", equals(Start, First)},
                    {"lasttail", (RealStep > 0 andalso Final =< End)
@@ -403,6 +420,9 @@ eqc_seq_prop() ->
                    {"intervals", equals([], FailedSteps)}])
             end).
 
+%% sum should work for any gin(number()), but computing the correct
+%% answer for positive integers is so easy that this test just uses
+%% them instead
 eqc_sum_prop() ->
     ?FORALL({Start, Extent},
             {nat(), nat()},
@@ -411,6 +431,12 @@ eqc_sum_prop() ->
                 StartToExtent = if Extent == 0 ->
                                         Start;
                                    true ->
+                                        %% using '/' instead of div
+                                        %% will produce a floating
+                                        %% point number instead of an
+                                        %% integer, which will pass
+                                        %% QuickCheck's equals/2, but
+                                        %% not PropEr's
                                        (End*(End+1) div 2)
                                             - ((Start-1)*(Start) div 2)
                                 end,
@@ -418,6 +444,8 @@ eqc_sum_prop() ->
                        sum(seq(Start, End)))
             end).
 
+%% map/2 should be basically equivalent to a list comprehension
+%% without any filters (after to_list-ing, of course).
 eqc_map_prop() ->
     ?FORALL(List,
             list(real()),
@@ -427,6 +455,7 @@ eqc_map_prop() ->
                        to_list(map(Map, from_list(List))))
             end).
 
+%% fold/3 should be equivalent to lists:foldl/3
 eqc_fold_prop() ->
     ?FORALL(List,
             list(real()),
@@ -436,6 +465,8 @@ eqc_fold_prop() ->
                        fold(Fold, 1, from_list(List)))
             end).
 
+%% filter/3 should be basically equivalent to a list comprehension,
+%% using the function as a filter (after to_list-ing, of course).
 eqc_filter_prop() ->
     ?FORALL(List,
             list(int()),
@@ -445,6 +476,12 @@ eqc_filter_prop() ->
                        to_list(filter(Filter, from_list(List))))
             end).
 
+%% foreach/2 and lists:foreach/2 should be basically equivalent
+%%
+%% This test attempts to test via the side effect of storing data in
+%% the process dictionary.  It uses eqc_foreach_key_popper/1 to
+%% construct a gin that reads its values from a key in the process
+%% dictionary.
 eqc_foreach_prop() ->
     ?FORALL(List,
             list(real()),
@@ -469,6 +506,11 @@ eqc_foreach_prop() ->
                 equals(List, get(GinKey))
             end).
 
+%% Create a gin that reads its values from a key in the process
+%% dictionary.  The key should hold a list of values.  Each time the
+%% gin is evaluated, it returns the head of the list, and stores the
+%% tail back to the process dictionary.  When the list is empty, the
+%% gin stops.
 eqc_foreach_key_popper(FromKey) ->
     fun() ->
             case get(FromKey) of
@@ -479,6 +521,8 @@ eqc_foreach_key_popper(FromKey) ->
             end
     end.
 
+%% zip/1 creates gins that produce tuples as large as their input list
+%% this test effectively tests zipwithl/2, as zip/1 uses it internally
 eqc_zip_prop() ->
     ?FORALL({ExtraLists, ListLength},
             {nat(), nat()},
@@ -492,10 +536,15 @@ eqc_zip_prop() ->
                                 _ ->
                                     zip([ from_list(L) || L <- Lists ])
                             end,
+                %% lists:zip/* can't handle more than 3 lists
                 ZippedList = eqc_zip_lists(Lists),
                 equals(ZippedList, to_list(ZippedGin))
             end).
 
+%% zipwitha/2 is tested by dynamically creating functions that
+%% tuple-ize their arguments, producing output identical to
+%% list_to_tuple/1, making it easy to reuse components from
+%% zip/1,2's test
 eqc_zipwitha_prop() ->
     ?FORALL({ExtraLists, ListLength},
             {?SUCHTHAT(X, nat(), X < 10), %% functions have an argument limit
@@ -508,10 +557,16 @@ eqc_zipwitha_prop() ->
                 equals(ZippedList, to_list(ZippedGin))
             end).
 
+%% make Count number of lists, each Length element long
 eqc_zip_make_lists(Count, Length) ->
     [ [ N*I || N <- lists:seq(1, Length) ]
       || I <- lists:seq(1, Count) ].
 
+%% construct a function that takes N arguments, and produces a tuple
+%% containing them in order; for example:
+%%    eqc_zip_make_apply_fun(2).
+%% should produce:
+%%    fun(_1, _2) -> {_1, _2} end.
 eqc_zip_make_apply_fun(N) ->
     Args = string:join(
              [ [$_|integer_to_list(A)] || A <- lists:seq(1, N) ],
@@ -523,11 +578,14 @@ eqc_zip_make_apply_fun(N) ->
     {value, Fun, _} = erl_eval:expr(Form, erl_eval:new_bindings()),
     Fun.
 
+%% zip N lists together (lists:zip can't do more than 3)
 eqc_zip_lists([[]|_]) -> [];
 eqc_zip_lists(Lists) ->
     {Heads, Tails} = lists:unzip([ {H, T} || [H|T] <- Lists ]),
     [ list_to_tuple(Heads) | eqc_zip_lists(Tails) ].
 
+%% make sure that next/1 produces 'stop' at the end of a gin,
+%% or {term(), fun()} in the middle
 eqc_next_prop() ->
     ?FORALL(List,
             list(int()),
