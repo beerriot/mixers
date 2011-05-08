@@ -484,7 +484,14 @@ eqc_zip_prop() ->
             {nat(), nat()},
             begin
                 Lists = eqc_zip_make_lists(2+ExtraLists, ListLength),
-                ZippedGin = zip([ from_list(L) || L <- Lists ]),
+                ZippedGin = case Lists of
+                                [A, B] ->
+                                    %% take this opportunity to test
+                                    %% the zip/2 convenience function
+                                    zip(from_list(A), from_list(B));
+                                _ ->
+                                    zip([ from_list(L) || L <- Lists ])
+                            end,
                 ZippedList = eqc_zip_lists(Lists),
                 equals(ZippedList, to_list(ZippedGin))
             end).
