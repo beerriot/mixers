@@ -55,6 +55,9 @@
 -module(gin).
 
 -export([
+         make/1,
+         make_n/3,
+         make_acc/2,
          from_list/1,
          to_list/1,
          fold/3,
@@ -100,6 +103,80 @@
 
 -type gin() :: gin_t(term()).
 -type gin_t(Type) :: fun(() -> stop | {Type, gin_t(Type)}).
+
+%% @doc Turn a zero-arity function into an infinite gin.  Each time
+%%      the gin is evaluated, the function is called.
+%%
+%%      That is, calling `make(Fun)' creates a gin that produces the
+%%      values `Fun()', `Fun()', `Fun()', ...
+%%
+%%      This could be useful for setting up a dumb message
+%%      intermediary:
+%% ```
+%% Dest = find_destination_pid(),
+%% LogFwd = fun(Msg) ->
+%%             error_logger:info_msg("Message: ~p", [Msg]),
+%%             Dest ! Msg
+%%          end,
+%% Rcv = fun() -> receive Any -> Any end end,
+%% I = spawn(gin, foreach, [LogFwd, gin:make(Rcv)]).
+%% '''
+%%      Sending any message to `I' should print the message to SASL,
+%%      and then forward it to `Dest'.
+-spec make(fun(() -> term())) -> gin().
+make(Fun) ->
+    fun() -> {Fun(), make(Fun)} end.
+
+%% @doc Turn an arity-1 function into an infinite gin.  Each time the
+%%      gin is evaluated, the function is evaluated on the value of
+%%      `Start + Step * (number of previous evaluations)'.
+%%
+%%      For example, calling this function as `make_n(Fun, 0, 1)'
+%%      would create a gin that produced the values `Fun(0)',
+%%      `Fun(1)', `Fun(2)', ...
+%%
+%%      This could be used to add ordinals to the messages in the
+%%      intermediary example of {@link make/1}, by substituting:
+%% ```
+%% ... LogFwd from make/1 example ...
+%% Rcv = fun(N) -> receive Any -> {N, Any} end end,
+%% I = spawn(gin, foreach, [LogFwd, gin:make_n(Rcv, 1, 1)]).
+%% '''
+-spec make_n(fun((number()) -> term()), number(), number()) -> gin().
+make_n(Fun, Start, Step) ->
+    fun() -> {Fun(Start), make_n(Fun, Start+Step, Step)} end.
+
+%% @doc Turn an arity-1 function into an infinite gin.  Each time the
+%%      gin is evaluated, the function is evaluation on its previous
+%%      evaluation's output, or on the `Base' argument during the
+%%      first evaluation.
+%%
+%%      Put another way, calling this function as `make_acc(Fun,
+%%      Base)' creates a gin that returns the values `Fun(Base)',
+%%      `Fun(Fun(Base))', `Fun(Fun(Fun(Base)))', ... .  Though, the
+%%      re-evaluation implied by that description does not happen
+%%      (`Fun(Base)' is only evaluated once).
+%%
+%%      This could be used, for example, as the framework for a
+%%      psuedorandom number gin-erator (George Marsaglia's Xorshift,
+%%      in this case):
+%% ```
+%% Xor128 = fun({X,Y,Z,W0}) ->
+%%             T = X bxor (X bsl 15),
+%%             W1 = 16#FFFFFFFFFFFFFFFF band
+%%                     ((W0 bxor (W0 bsr 21)) bxor (T bxor (T bsr 4))),
+%%             {Y, Z, W0, W1}
+%%          end,
+%% Seed = {7950130472521745565,10955255568897125814,
+%%         4054168878756629592,3856359273729777771},
+%% GR0 = gin:make_acc(Xor128, Seed),
+%% {{_,_,_,13671966243293953624},GR1} = gin:next(GR0),
+%% {{_,_,_,1896413306210138800}, GR2} = gin:next(GR1),
+%% {{_,_,_,11344635856470842258},GR3} = gin:next(GR2).
+%% '''
+-spec make_acc(fun((term()) -> term()), term()) -> gin().
+make_acc(Fun, Base) ->
+    fun() -> Next = Fun(Base), {Next, make_acc(Fun, Next)} end.
 
 %% @doc Fold over a gin, accumulating a result.  `Fun' is called once
 %%      for each item the gin produces, as `Fun(Item, Accumulator)'.
@@ -344,7 +421,10 @@ eqc_test_() ->
                          {"foreach", eqc_foreach_prop()},
                          {"zip", eqc_zip_prop()},
                          {"zipwitha", eqc_zipwitha_prop()},
-                         {"next", eqc_next_prop()}
+                         {"next", eqc_next_prop()},
+                         {"make", eqc_make_prop()},
+                         {"make_n", eqc_make_n_prop()},
+                         {"make_acc", eqc_make_acc_prop()}
                         ]].
 
 %% roundtripping from_list/to_list should produce its input
@@ -603,6 +683,59 @@ eqc_next_prop() ->
                                             arity, erlang:fun_info(Rest))}])
                 end
             end).
+
+%% make/1 should just keep calling its function
+eqc_make_prop() ->
+    ?FORALL(N,
+            nat(),
+            begin
+                Gin = make(fun erlang:now/0),
+                %% produce N now tuples
+                {_, Nows} = fold(fun(_,{G,A}) ->
+                                         {V, Next} = next(G),
+                                         {Next, [V|A]}
+                                 end,
+                                 {Gin, []},
+                                 seq(1, N)),
+                %% make sure they came out in order
+                equals(lists:reverse(Nows), lists:sort(Nows))
+            end).
+
+%% make_n/1 should behave like seq/3 to an extent
+eqc_make_n_prop() ->
+    ?FORALL({Start, Step, TestSteps},
+            {real(), ?SUCHTHAT(S, real(), S =/= 0.0), nat()},
+            begin
+                Identity = fun(N) -> N end,
+                NGin = make_n(Identity, Start, Step),
+                compare_seq_output(NGin, Start, Step, TestSteps)
+            end).
+
+%% make_acc/1 can be made to act like seq/3 as well
+eqc_make_acc_prop() ->
+    ?FORALL({Start, Step, TestSteps},
+            {real(), ?SUCHTHAT(S, real(), S =/= 0.0), nat()},
+            begin
+                Inc = fun(Acc) -> Acc+Step end,
+                AccGin = make_acc(Inc, Start),
+                %% AccGin skips Start
+                compare_seq_output(AccGin, Start+Step, Step, TestSteps)
+            end).
+
+%% compare the output of Gin to a seq/3
+compare_seq_output(Gin, Start, Step, TestSteps) ->
+    SeqGin = seq(Start, Start+Step*TestSteps, Step),
+    {_, Fails} = fold(fun(Expect, {G, Fails}) ->
+                              case next(G) of
+                                  {Expect, Next} ->
+                                      {Next, Fails};
+                                  {Other, Next} ->
+                                      {Next, [Other|Fails]}
+                              end
+                      end,
+                      {Gin, []},
+                      SeqGin),
+    equals([], Fails).
 
 -endif. % EP
 
