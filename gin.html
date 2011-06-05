@@ -60,6 +60,9 @@ stay that way.</p>
 <tr><td valign="top"><a href="#fold-3">fold/3</a></td><td>Fold over a gin, accumulating a result.</td></tr>
 <tr><td valign="top"><a href="#foreach-2">foreach/2</a></td><td>Evaluate <code>Fun</code> for each item produced by <code>Gin</code>.</td></tr>
 <tr><td valign="top"><a href="#from_list-1">from_list/1</a></td><td>Create a gin that produces the items from a list, in order.</td></tr>
+<tr><td valign="top"><a href="#make-1">make/1</a></td><td>Turn a zero-arity function into an infinite gin.</td></tr>
+<tr><td valign="top"><a href="#make_acc-2">make_acc/2</a></td><td>Turn an arity-1 function into an infinite gin.</td></tr>
+<tr><td valign="top"><a href="#make_n-3">make_n/3</a></td><td>Turn an arity-1 function into an infinite gin.</td></tr>
 <tr><td valign="top"><a href="#map-2">map/2</a></td><td>Map over a gin, producing a new gin with each item being the
        result of the application <code>Fun(Item)</code>.</td></tr>
 <tr><td valign="top"><a href="#next-1">next/1</a></td><td>Get the next value to be produced by a gin, and a handle to
@@ -128,6 +131,74 @@ not evaluated until something evaluates the output gin.</p>
   <pre>  [Head|RestList] = List.
   {Head,RestGin}  = next(from_list(List)).
   stop            = next(from_list([])).</pre></p>
+
+<h3 class="function"><a name="make-1">make/1</a></h3>
+<div class="spec">
+<p><tt>make(Fun::fun(() -&gt; term())) -&gt; <a href="#type-gin">gin()</a></tt><br></p>
+</div><p><p>Turn a zero-arity function into an infinite gin.  Each time       
+the gin is evaluated, the function is called.</p>
+ 
+       <p>That is, calling <code>make(Fun)</code> creates a gin that produces the
+       values <code>Fun()</code>, <code>Fun()</code>, <code>Fun()</code>, ...</p>
+ 
+       This could be useful for setting up a dumb message
+       intermediary:
+  <pre>  Dest = find_destination_pid(),
+  LogFwd = fun(Msg) -&gt;
+              error_logger:info_msg("Message: ~p", [Msg]),
+              Dest ! Msg
+           end,
+  Rcv = fun() -&gt; receive Any -&gt; Any end end,
+  I = spawn(gin, foreach, [LogFwd, gin:make(Rcv)]).</pre>
+       Sending any message to <code>I</code> should print the message to SASL,
+       and then forward it to <code>Dest</code>.</p>
+
+<h3 class="function"><a name="make_acc-2">make_acc/2</a></h3>
+<div class="spec">
+<p><tt>make_acc(Fun::fun((term()) -&gt; term()), Base::term()) -&gt; <a href="#type-gin">gin()</a></tt><br></p>
+</div><p><p>Turn an arity-1 function into an infinite gin.  Each time the
+       gin is evaluated, the function is evaluation on its previous
+       evaluation's output, or on the <code>Base</code> argument during the       
+first evaluation.</p>
+ 
+       <p>Put another way, calling this function as <code>make_acc(Fun,
+       Base)</code> creates a gin that returns the values <code>Fun(Base)</code>,
+       <code>Fun(Fun(Base))</code>, <code>Fun(Fun(Fun(Base)))</code>, ... .  Though, the
+       re-evaluation implied by that description does not happen
+       (<code>Fun(Base)</code> is only evaluated once).</p>
+ 
+       This could be used, for example, as the framework for a
+       psuedorandom number gin-erator (George Marsaglia's Xorshift,
+       in this case):
+  <pre>  Xor128 = fun({X,Y,Z,W0}) -&gt;
+              T = X bxor (X bsl 15),
+              W1 = 16#FFFFFFFFFFFFFFFF band
+                      ((W0 bxor (W0 bsr 21)) bxor (T bxor (T bsr 4))),
+              {Y, Z, W0, W1}
+           end,
+  Seed = {7950130472521745565,10955255568897125814,
+          4054168878756629592,3856359273729777771},
+  GR0 = gin:make_acc(Xor128, Seed),
+  {{_,_,_,13671966243293953624},GR1} = gin:next(GR0),
+  {{_,_,_,1896413306210138800}, GR2} = gin:next(GR1),
+  {{_,_,_,11344635856470842258},GR3} = gin:next(GR2).</pre></p>
+
+<h3 class="function"><a name="make_n-3">make_n/3</a></h3>
+<div class="spec">
+<p><tt>make_n(Fun::fun((number()) -&gt; term()), Start::number(), Step::number()) -&gt; <a href="#type-gin">gin()</a></tt><br></p>
+</div><p><p>Turn an arity-1 function into an infinite gin.  Each time the
+       gin is evaluated, the function is evaluated on the value of
+       <code>Start + Step * (number of previous evaluations)</code>.</p>
+ 
+       <p>For example, calling this function as <code>make_n(Fun, 0, 1)</code>
+       would create a gin that produced the values <code>Fun(0)</code>,
+       <code>Fun(1)</code>, <code>Fun(2)</code>, ...</p>
+ 
+       This could be used to add ordinals to the messages in the
+       intermediary example of <a href="#make-1"><code>make/1</code></a>, by substituting:
+  <pre>  ... LogFwd from make/1 example ...
+  Rcv = fun(N) -&gt; receive Any -&gt; {N, Any} end end,
+  I = spawn(gin, foreach, [LogFwd, gin:make_n(Rcv, 1, 1)]).</pre></p>
 
 <h3 class="function"><a name="map-2">map/2</a></h3>
 <div class="spec">
@@ -236,6 +307,6 @@ evaluated until something evaluates the output gin.</p>
 <hr>
 
 <div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc, May 6 2011, 16:44:15.</i></p>
+<p><i>Generated by EDoc, Jun 5 2011, 10:59:42.</i></p>
 </body>
 </html>
